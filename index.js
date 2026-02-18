@@ -22,7 +22,7 @@ app.post("/generate-gif", async (req, res) => {
     if (!config) return res.status(400).send("Missing config");
 
     const FRAMES = 30;
-    const DELAY = 100; // 100ms per frame = ~3 seconds total
+    const DELAY = 1000; // 1000ms per frame = 1 real second per frame
 
     // Determine which units to show
     const units = [];
