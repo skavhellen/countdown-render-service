@@ -1,6 +1,6 @@
 const express = require("express");
 const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
-const GIFEncoder = require("gifencoder");
+const GIFEncoder = require("gif-encoder-2");
 const path = require("path");
 
 // ── Register fonts ──────────────────────────────────────────────────
