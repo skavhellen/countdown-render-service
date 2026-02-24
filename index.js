@@ -6,13 +6,13 @@ const path = require("path");
 // Register fonts
 const fontsDir = path.join(__dirname, "fonts");
 GlobalFonts.registerFromPath(path.join(fontsDir, "BebasNeue-Regular.ttf"), "Bebas Neue");
-GlobalFonts.registerFromPath(path.join(fontsDir, "Inter-Regular.ttf"), "Inter");
+GlobalFonts.registerFromPath(path.join(fontsDir, "Inter-VariableFont_opsz,wght.ttf"), "Inter");
 GlobalFonts.registerFromPath(path.join(fontsDir, "Lato-Regular.ttf"), "Lato");
 GlobalFonts.registerFromPath(path.join(fontsDir, "Montserrat-Regular.ttf"), "Montserrat");
-GlobalFonts.registerFromPath(path.join(fontsDir, "OpenSansCondensed-Light.ttf"), "Open Sans Condensed");
+GlobalFonts.registerFromPath(path.join(fontsDir, "OpenSans_Condensed-Regular.ttf"), "Open Sans Condensed");
 GlobalFonts.registerFromPath(path.join(fontsDir, "Oswald-Regular.ttf"), "Oswald");
 GlobalFonts.registerFromPath(path.join(fontsDir, "PlayfairDisplay-Regular.ttf"), "Playfair Display");
-GlobalFonts.registerFromPath(path.join(fontsDir, "Roboto-Regular.ttf"), "Roboto");
+GlobalFonts.registerFromPath(path.join(fontsDir, "Roboto-regular.ttf"), "Roboto");
 GlobalFonts.registerFromPath(path.join(fontsDir, "RobotoSlab-Regular.ttf"), "Roboto Slab");
 GlobalFonts.registerFromPath(path.join(fontsDir, "Verdana.ttf"), "Verdana");
 
