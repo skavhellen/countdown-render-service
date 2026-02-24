@@ -1,138 +1,186 @@
 const express = require("express");
-const { createCanvas } = require("@napi-rs/canvas");
-const GIFEncoder = require("gif-encoder-2");
+const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
+const GIFEncoder = require("gifencoder");
+const path = require("path");
 
+// ── Register fonts ──────────────────────────────────────────────────
+const fontsDir = path.join(__dirname, "fonts");
+GlobalFonts.registerFromPath(path.join(fontsDir, "BebasNeue-Regular.ttf"), "Bebas Neue");
+GlobalFonts.registerFromPath(path.join(fontsDir, "Inter-Bold.ttf"), "Inter");
+GlobalFonts.registerFromPath(path.join(fontsDir, "Lato-Bold.ttf"), "Lato");
+GlobalFonts.registerFromPath(path.join(fontsDir, "Montserrat-Bold.ttf"), "Montserrat");
+GlobalFonts.registerFromPath(path.join(fontsDir, "OpenSansCondensed-Bold.ttf"), "Open Sans Condensed");
+GlobalFonts.registerFromPath(path.join(fontsDir, "Oswald-Bold.ttf"), "Oswald");
+GlobalFonts.registerFromPath(path.join(fontsDir, "PlayfairDisplay-Bold.ttf"), "Playfair Display");
+GlobalFonts.registerFromPath(path.join(fontsDir, "Roboto-Bold.ttf"), "Roboto");
+GlobalFonts.registerFromPath(path.join(fontsDir, "RobotoSlab-Bold.ttf"), "Roboto Slab");
+GlobalFonts.registerFromPath(path.join(fontsDir, "Verdana-Bold.ttf"), "Verdana");
+
+// ── App ─────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
 
-const API_KEY = process.env.RENDER_API_KEY || "changeme";
+const API_KEY = process.env.RENDER_API_KEY || "";
 
-// Auth middleware
-app.use("/generate-gif", (req, res, next) => {
-  const auth = req.headers.authorization;
-  if (!auth || auth !== `Bearer ${API_KEY}`) {
+app.post("/generate-gif", (req, res) => {
+  // Auth check
+  const auth = req.headers.authorization || "";
+  if (API_KEY && auth !== `Bearer ${API_KEY}`) {
     return res.status(401).send("Unauthorized");
   }
-  next();
-});
 
-app.post("/generate-gif", async (req, res) => {
   try {
     const { config, diffMs } = req.body;
     if (!config) return res.status(400).send("Missing config");
 
     const FRAMES = 30;
-    const DELAY = 1000; // 1000ms per frame = 1 real second per frame
+    const DELAY = 1000;
+    const WIDTH = 470;
+    const HEIGHT = 176;
 
-    // Determine which units to show
-    const units = [];
-    if (config.display_days) units.push("days");
-    if (config.display_hours) units.push("hours");
-    units.push("minutes", "seconds");
+    const encoder = new GIFEncoder(WIDTH, HEIGHT);
+    const canvas = createCanvas(WIDTH, HEIGHT);
+    const ctx = canvas.getContext("2d");
 
-    const labels = {
-      days: config.label_days || "Days",
-      hours: config.label_hours || "Hours",
-      minutes: config.label_minutes || "Minutes",
-      seconds: config.label_seconds || "Seconds",
+    // Start encoding
+    const stream = encoder.createReadStream();
+    const chunks = [];
+    stream.on("data", (chunk) => chunks.push(chunk));
+    stream.on("end", () => {
+      const gif = Buffer.concat(chunks);
+      res.set("Content-Type", "image/gif");
+      res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.send(gif);
+    });
+
+    encoder.start();
+    encoder.setRepeat(0);
+    encoder.setDelay(DELAY);
+    encoder.setQuality(10);
+
+    // Build unit list
+    const buildUnits = (remainMs) => {
+      const totalSec = Math.max(0, Math.floor(remainMs / 1000));
+      const d = Math.floor(totalSec / 86400);
+      const h = Math.floor((totalSec % 86400) / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+
+      const units = [];
+      if (config.display_days !== false)
+        units.push({ value: d, label: config.label_days || "Days" });
+      if (config.display_hours !== false)
+        units.push({ value: h, label: config.label_hours || "Hours" });
+      units.push({ value: m, label: config.label_minutes || "Minutes" });
+      units.push({ value: s, label: config.label_seconds || "Seconds" });
+      return units;
     };
 
-    // Canvas sizing
-    const boxSize = 80;
-    const gap = 16;
-    const padding = 24;
-    const labelHeight = 20;
-    const canvasW = padding * 2 + units.length * boxSize + (units.length - 1) * gap;
-    const canvasH = padding * 2 + boxSize + labelHeight + 8;
+    const template = config.template || "square";
+    const font = config.font || "Roboto";
+    const bgColor = config.background_color || "#FFFFFF";
+    const boxColor = config.box_color || "#FE8A22";
+    const textColor = config.text_color || "#FFFFFF";
+    const labelColor = config.label_color || "#FE8A22";
 
-    const encoder = new GIFEncoder(canvasW, canvasH);
-    encoder.setDelay(DELAY);
-    encoder.setRepeat(0);
-    encoder.setQuality(10);
-    encoder.start();
+    const isBorder = template.includes("border");
+    const isInside = template.includes("inside");
+    const isDigits = template === "square-digits";
+    const isCircle = template.includes("circle");
 
-    for (let f = 0; f < FRAMES; f++) {
-      const remaining = Math.max(0, diffMs - f * 1000);
-      const totalSec = Math.floor(remaining / 1000);
-      const days = Math.floor(totalSec / 86400);
-      const hours = Math.floor((totalSec % 86400) / 3600);
-      const minutes = Math.floor((totalSec % 3600) / 60);
-      const seconds = totalSec % 60;
+    // Get border radius
+    const getRadius = () => {
+      if (isCircle) return 999;
+      switch (template) {
+        case "rounded-sm": return 6;
+        case "rounded-md": return 12;
+        case "rounded-lg": return 20;
+        default: return 3;
+      }
+    };
 
-      const values = { days, hours, minutes, seconds };
+    const radius = getRadius();
 
-      const canvas = createCanvas(canvasW, canvasH);
-      const ctx = canvas.getContext("2d");
+    // Draw rounded rect helper
+    const roundRect = (x, y, w, h, r) => {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y, x + w, y + r, r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y, x + w - r, y + h, r);
+      ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x, y + h, x, y + h - r, r);
+      ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r);
+      ctx.closePath();
+    };
 
-      // Background
-      ctx.fillStyle = config.background_color || "#FFFFFF";
-      ctx.fillRect(0, 0, canvasW, canvasH);
+    for (let i = 0; i < FRAMES; i++) {
+      const remaining = diffMs - i * 1000;
+      const units = buildUnits(remaining);
 
-      const template = config.template || "square";
-      const isCircle = template.includes("circle");
-      const isBorder = template.includes("border");
-      const isDigits = template === "square-digits";
-      const isInside = template.includes("inside");
+      // Clear background
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // Determine corner radius
-      let radius = 0;
-      if (isCircle) radius = boxSize / 2;
-      else if (template === "rounded-sm") radius = 4;
-      else if (template === "rounded-md") radius = 8;
-      else if (template === "rounded-lg") radius = 16;
+      const boxSize = 80;
+      const gap = 16;
+      const totalW = units.length * boxSize + (units.length - 1) * gap;
+      const startX = (WIDTH - totalW) / 2;
+      const boxY = isInside ? (HEIGHT - boxSize) / 2 : (HEIGHT - boxSize - 24) / 2;
 
-      units.forEach((unit, i) => {
-        const x = padding + i * (boxSize + gap);
-        const y = padding;
-        const val = String(values[unit]).padStart(2, "0");
+      units.forEach((unit, idx) => {
+        const x = startX + idx * (boxSize + gap);
 
         // Draw box
         if (!isDigits) {
-          ctx.beginPath();
-          if (isCircle) {
-            ctx.arc(x + boxSize / 2, y + boxSize / 2, boxSize / 2, 0, Math.PI * 2);
-          } else {
-            roundRect(ctx, x, y, boxSize, boxSize, radius);
-          }
-
+          roundRect(x, boxY, boxSize, boxSize, radius);
           if (isBorder) {
-            ctx.strokeStyle = config.box_color || "#FE8A22";
+            ctx.strokeStyle = boxColor;
             ctx.lineWidth = 2;
             ctx.stroke();
           } else {
-            ctx.fillStyle = config.box_color || "#FE8A22";
+            ctx.fillStyle = boxColor;
             ctx.fill();
           }
         }
 
-        // Draw number
-        const fontSize = 32;
-        ctx.font = `bold ${fontSize}px ${config.font || "Arial"}`;
+        // Draw digit
+        const digitColor = isDigits ? boxColor : isBorder ? boxColor : textColor;
+        ctx.fillStyle = digitColor;
+        ctx.font = `bold 36px "${font}"`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
-        if (isDigits) {
-          ctx.fillStyle = config.box_color || "#FE8A22";
-        } else if (isBorder) {
-          ctx.fillStyle = config.box_color || "#FE8A22";
-        } else {
-          ctx.fillStyle = config.text_color || "#FFFFFF";
-        }
-
-        const textY = isInside ? y + boxSize / 2 - 8 : y + boxSize / 2;
-        ctx.fillText(val, x + boxSize / 2, textY);
+        const digitY = isInside ? boxY + boxSize / 2 - 8 : boxY + boxSize / 2;
+        ctx.fillText(
+          String(unit.value).padStart(2, "0"),
+          x + boxSize / 2,
+          digitY
+        );
 
         // Draw label
         if (isInside) {
-          ctx.font = `600 9px ${config.font || "Arial"}`;
-          ctx.fillStyle = isBorder
-            ? config.box_color || "#FE8A22"
-            : config.text_color || "#FFFFFF";
-          ctx.fillText(labels[unit].toUpperCase(), x + boxSize / 2, y + boxSize / 2 + 16);
+          // Label inside the box
+          const insideLabelColor = isBorder ? boxColor : textColor;
+          ctx.fillStyle = insideLabelColor;
+          ctx.font = `bold 9px "${font}"`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(
+            unit.label.toUpperCase(),
+            x + boxSize / 2,
+            boxY + boxSize / 2 + 20
+          );
         } else {
-          ctx.font = `500 11px ${config.font || "Arial"}`;
-          ctx.fillStyle = config.label_color || "#FE8A22";
-          ctx.fillText(labels[unit].toUpperCase(), x + boxSize / 2, y + boxSize + labelHeight);
+          // Label below the box
+          ctx.fillStyle = labelColor;
+          ctx.font = `bold 11px "${font}"`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText(unit.label.toUpperCase(), x + boxSize / 2, boxY + boxSize + 6);
         }
       });
 
@@ -140,33 +188,13 @@ app.post("/generate-gif", async (req, res) => {
     }
 
     encoder.finish();
-    const buffer = encoder.out.getData();
-
-    res.set("Content-Type", "image/gif");
-    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.send(buffer);
   } catch (err) {
     console.error("GIF generation error:", err);
     res.status(500).send(`Error: ${err.message}`);
   }
 });
 
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
+app.get("/health", (req, res) => res.send("OK"));
 
-// Health check
-app.get("/", (req, res) => res.send("OK"));
-
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Countdown service running on port ${PORT}`));
