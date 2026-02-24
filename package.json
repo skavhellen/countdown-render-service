@@ -1,12 +1,14 @@
 {
-  "name": "countdown-render-service",
+  "name": "countdown-gif-service",
   "version": "1.0.0",
+  "description": "Countdown GIF generator service",
+  "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.62",
-    "express": "^4.21.0",
-    "gif-encoder-2": "^1.0.5"
+    "express": "^4.18.2",
+    "gifencoder": "^2.0.1"
   }
 }
